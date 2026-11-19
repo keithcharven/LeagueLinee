@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getLeaderboard, getLeagues, getMatches, getStandings } from '../services/leagueService.js';
-import { games } from '../services/mockData.js';
 import { Badge, Empty, Spinner, fmtDate } from '../components/ui.jsx';
 
+const GAMES = ['Mobile Legends', 'Valorant', 'Dota 2'];
 const TABS = ['Standings', 'Schedule', 'Leaderboards'];
 
 function Standings({ id }) {
@@ -40,13 +40,14 @@ function Standings({ id }) {
 function Schedule({ id }) {
   const { data, isLoading } = useQuery({ queryKey: ['matches', id], queryFn: () => getMatches(id) });
   if (isLoading) return <Spinner />;
-  const group = (s) => data.filter((m) => m.status === s);
-  const Section = ({ title, items }) => (
+  const items = data || [];
+  const group = (s) => items.filter((m) => m.status === s);
+  const Section = ({ title, list }) => (
     <section className="mb-6">
       <h3 className="mb-2 text-base">{title}</h3>
-      {items.length === 0 ? <p className="text-sm text-ink-500">Nothing here yet.</p> : (
+      {list.length === 0 ? <p className="text-sm text-ink-500">Nothing here yet.</p> : (
         <ul className="divide-y divide-ink-700 rounded-md border border-ink-700">
-          {items.map((m) => (
+          {list.map((m) => (
             <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
               <span className="font-medium text-white">{m.home} <span className="text-ink-500">vs</span> {m.away}</span>
               <span className="flex items-center gap-3 text-ink-500">
@@ -59,13 +60,13 @@ function Schedule({ id }) {
       )}
     </section>
   );
-  return <><Section title="Upcoming" items={group('UPCOMING')} /><Section title="Completed" items={group('COMPLETED')} /></>;
+  return <><Section title="Upcoming" list={group('UPCOMING')} /><Section title="Completed" list={group('COMPLETED')} /></>;
 }
 
 function Leaderboards({ id }) {
   const { data, isLoading } = useQuery({ queryKey: ['lb', id], queryFn: () => getLeaderboard(id) });
   if (isLoading) return <Spinner />;
-  if (!data?.length) return <Empty title="No player stats yet" />;
+  if (!data?.length) return <Empty title="No player stats yet" hint="Player K/D/A leaderboards update once match results are verified." />;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[520px] text-left text-sm">
@@ -90,10 +91,12 @@ export default function HubPage() {
   const navigate = useNavigate();
   const [game, setGame] = useState('All');
   const [tab, setTab] = useState('Standings');
-  const { data: leagues, isLoading } = useQuery({ queryKey: ['leagues', game], queryFn: () => getLeagues(game) });
+  const { data: leagues, isLoading, isError } = useQuery({ queryKey: ['leagues', game], queryFn: () => getLeagues(game) });
   const selected = leagues?.find((l) => String(l.id) === leagueId) || leagues?.[0];
 
-  useEffect(() => { if (!leagueId && selected) navigate(`/leagues/${selected.id}`, { replace: true }); }, [leagueId, selected, navigate]);
+  useEffect(() => {
+    if (!leagueId && selected) navigate(`/leagues/${selected.id}`, { replace: true });
+  }, [leagueId, selected, navigate]);
 
   return (
     <>
@@ -101,7 +104,7 @@ export default function HubPage() {
         <h1 className="max-w-2xl text-4xl font-bold leading-tight md:text-5xl">Every match, every score, in one place.</h1>
         <p className="mt-3 max-w-xl text-slate-400">Follow community and school esports leagues. Check standings, see when your team plays, and find the top players.</p>
         <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Filter by game">
-          {['All', ...games].map((g) => (
+          {['All', ...GAMES].map((g) => (
             <button key={g} onClick={() => { setGame(g); navigate('/'); }} aria-pressed={game === g}
               className={`rounded-full border px-4 py-1.5 text-sm ${game === g ? 'border-volt bg-volt/10 text-volt' : 'border-ink-700 text-slate-300 hover:bg-ink-800'}`}>
               {g}
@@ -110,7 +113,15 @@ export default function HubPage() {
         </div>
       </section>
 
-      {isLoading ? <Spinner /> : !leagues?.length ? <Empty title={`No ${game} leagues yet`} hint="Try another game." /> : (
+      {isLoading ? (
+        <Spinner />
+      ) : isError ? (
+        <div className="panel p-6 text-sm text-amber-300">
+          Unable to connect to the LeagueLine backend API. Make sure the Spring Boot server is running on port 8080.
+        </div>
+      ) : !leagues?.length ? (
+        <Empty title={`No ${game} leagues yet`} hint="Try another game." />
+      ) : (
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           <ul className="space-y-2">
             {leagues.map((l) => (
